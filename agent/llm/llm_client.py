@@ -44,6 +44,8 @@ class LLMClient:
             self.base_url = "https://api.openai.com/v1"
         elif provider == "openrouter":
             self.base_url = "https://openrouter.ai/api/v1"
+        elif provider == "anthropic":
+            self.base_url = "https://api.anthropic.com/v1"
         else:
             self.base_url = base_url  # Only use config for unknown/custom providers
         self.host = ollama_host
@@ -102,6 +104,8 @@ class LLMClient:
             return self._query_openai(prompt)
         elif self.provider == "ollama":
             return self._query_ollama(prompt)
+        elif self.provider == "anthropic":
+            return self._query_anthropic(prompt)
         else:
             raise NotImplementedError(f"Unsupported provider: {self.provider}")
 
@@ -132,6 +136,28 @@ class LLMClient:
             return resp.json().get("response", "").strip()
         except Exception as exc:
             raise RuntimeError(f"Ollama request failed: {exc}")
+
+    def _query_anthropic(self, prompt):
+        """Send a prompt to the Anthropic API."""
+        try:
+            url = f"{self.base_url.rstrip('/')}/messages"
+            headers = {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
+            data = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 4096,
+            }
+            resp = requests.post(url, headers=headers, json=data)
+            resp.raise_for_status()
+            if resp.status_code == 429:
+                raise RuntimeError("Rate limit exceeded")
+            return resp.json()["content"][0]["text"]
+        except Exception as exc:
+            raise RuntimeError(f"Anthropic request failed: {exc}")
 
     # ========== Repair & Correction ==========
 

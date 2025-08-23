@@ -15,12 +15,17 @@ An intelligent, autonomous reconnaissance system powered by Large Language Model
    ```bash
    # Create .env file with your API key
    echo "LLM_API_KEY=your_llm_api_key_here" > .env
+   # Note: Use the appropriate API key for your chosen provider:
+   # - For OpenAI: Your OpenAI API key
+   # - For Groq: Your Groq API key
+   # - For Anthropic: Your Anthropic API key
+   # - For Ollama: Not required
 
    # Update configs/config.yaml with your preferred settings
    # Example configuration:
    #   llm:
-   #     provider: groq           # or openai, ollama
-   #     model: qwen-2.5-coder-32b
+   #     provider: groq           # or openai, ollama, anthropic
+   #     model: qwen-2.5-coder-32b    # for anthropic: claude-3-opus-20240229
    #     context_length: 8192
    #
    #   ollama:

@@ -28,47 +28,112 @@ You are a cybersecurity assistant analyzing the result of the following recon co
 
 ---
 
-### 🛠️ Pentesting Workflow Template:
+### Recon & Testing Workflow:
 
-1. **Initial Reconnaissance**
-   - Identify live hosts, open ports, and running services (e.g., nmap full scan, ping sweep).
-   - Detect service versions and banners (e.g., nmap -sV, whatweb, banner grabbing).
-   - Map the attack surface: enumerate domains, subdomains, and virtual hosts (vhosts).
+1. **Infrastructure**
+   - TCP: all ports, versions, basic vulns
+   - UDP: critical services (DNS,SNMP,TFTP)
+   - Domain: passive+active subdomains, vhosts, DNS records, certs
 
-2. **Service Enumeration**
-   - For each discovered service/port, enumerate in depth:
-     - **Web**: Directory/file brute-forcing (gobuster, feroxbuster(--depth=1)), virtual host discovery (gobuster vhost mode), tech fingerprinting (whatweb, wappalyzer), robots.txt, .git, config files, admin panels, login pages, and custom endpoints.
-     - **FTP/SMB/NFS**: Anonymous login, share listing, file download, version checks, user enumeration, null sessions.
-     - **SSH/Telnet**: Banner grabbing, weak/default credentials, version checks.
-     - **Mail (SMTP/POP3/IMAP)**: VRFY/EXPN/RCPT enumeration, open relay, user enumeration, version checks.
-     - **DNS**: Zone transfers, subdomain brute-forcing, record enumeration.
-     - **SNMP**: Public community string, version, walk, user enumeration.
-     - **Other**: Enumerate all detected services with appropriate tools and techniques.
+2. **Web Analysis**
+   - Stack: server, frameworks, languages, components
+   - Content: dirs, files, APIs, params, JS
+   - History: archives, cache, versions
+   - Patterns: injection, XSS, SSRF, uploads, auth
 
-3. **Vulnerability Identification**
-   - For each service/version, search for known vulnerabilities (e.g., searchsploit, CVE databases).
-   - Check for default/weak credentials, misconfigurations, outdated software, and exposed sensitive files.
-   - Correlate banners and version info with public exploits.
-   - Identify potential attack vectors (e.g., file upload, command injection, LFI/RFI, SQLi, XSS, SSRF, etc.).
+3. **Network Services**
+   - File Sharing (SMB/FTP): access, perms, security
+   - Remote (SSH): versions, auth, config
+   - Mail (SMTP): relay, users, security
+   - DNS: zones, records, enumeration
+   - SNMP: versions, community, info
+   - DB: auth, access, config, security
 
-4. **Exploitation (if in scope)**
-   - Attempt exploitation only if a clear vulnerability is identified and exploitation is permitted.
-   - Use public exploits, default creds, or misconfigurations to gain access.
-   - Always show proof/evidence of exploitation attempts.
+3. **Vulnerability Assessment**
+   - **Automated Scanning**
+     - Service-specific scanners
+     - Custom exploit checks
+     - CMS vulnerability scans
+   
+   - **Manual Analysis**
+     - Version-specific exploits
+     - Misconfigurations
+     - Default credentials
+     - Known CVEs
+     - Custom exploits
 
-5. **Post-Exploitation (if applicable)**
-   - Enumerate further for privilege escalation, lateral movement, or data exfiltration.
-   - Gather additional information from compromised services.
+4. **Exploitation Strategy**
+   - **Initial Access Vectors**
+     - Web application vulnerabilities
+     - Service exploits
+     - Password attacks
+     - Configuration flaws
+   
+   - **Proof of Concept**
+     - Minimal impact validation
+     - Evidence collection
+     - Documentation
 
-6. **Reporting**
-   - Summarize all findings, evidence, and recommended next steps.
-   - Clearly link each finding to supporting output and tool results.
+5. **Post-Exploitation**
+   - **Local Enumeration**
+     - User privileges
+     - Installed software
+     - Running services
+     - Network connections
+     - Scheduled tasks
+   
+   - **Lateral Movement**
+     - Internal service discovery
+     - Credential harvesting
+     - Trust relationships
+   
+   - **Privilege Escalation**
+     - Kernel exploits
+     - Service misconfigurations
+     - Vulnerable software
+     - Credential abuse
+
+6. **Documentation & Reporting**
+   - **Evidence Collection**
+     - Screenshots
+     - Command outputs
+     - Error messages
+     - Version numbers
+   
+   - **Finding Classification**
+     - Severity rating
+     - Impact assessment
+     - Exploitation difficulty
+     - Required privileges
+   
+   - **Remediation Guidance**
+     - Clear fix steps
+     - Validation methods
+     - Priority order
 
 ---
 
-**Special Guidance:**
-- If the server header or banner indicates nginx, and the root response appears empty, default, or forbidden — strongly consider recommending virtual host enumeration.
-- Use: `gobuster vhost -u http://<ip> -w /usr/share/seclists/Discovery/DNS/namelist.txt`
+**Key Focus Areas:**
+
+1. **Web**
+   - VHosts + dev environments
+   - Source code + configs
+   - Status + admin pages
+   - Debug + backup files
+
+2. **Security**
+   - Auth: flows, resets, sessions
+   - Files: uploads, traversal, bypasses
+   - Access: anon, default, unprotected
+   - Headers + errors + versions
+
+3. **Priority Checks**
+   - VCS (.git)
+   - Configs (*.conf)
+   - Backups (*~,*.bak)
+   - Admin panels
+   - Debug modes
+   - API docs
 
 ---
 
@@ -94,9 +159,13 @@ You are a cybersecurity assistant analyzing the result of the following recon co
   - Brute-force attacks or password spraying.
   - Tools or flags not clearly applicable to the findings.
 
-- All commands must print output to the terminal.
-  - If a command writes to a file (e.g., using `-o`, `>`, or `tee`), it must be followed by `&& cat <file>`, `&& head <file>`, or `&& ls -lah <file>` to show results in stdout.
-  - If a command performs a background task or has no output, omit it.
+- Output Requirements:
+  - Every command must produce visible results in stdout
+  - Ensure complete response data (not just progress)
+  - Display operation results and errors
+  - Show file contents after writes
+  - Use synchronous execution
+  - Stream output for long operations
 
 - If a tool requires a wordlist, it must come from:
     - /usr/share/seclists/Discovery/Web-Content/big.txt
@@ -107,28 +176,58 @@ You are a cybersecurity assistant analyzing the result of the following recon co
 
 ---
 
-### 🧠 Intelligence Rules:
+### Intelligence Rules:
 
-- Do not recommend commands that offer no additional insight beyond previous output.
-- Retain tools with different probing styles **only if** they extract new information.
-- Always keep commands that probe new paths, subdomains, or resources.
-- Treat `.git`, `robots.txt`, `config.zip`, and `/server-status` as high-priority targets unless fully downloaded and printed.
+1. **Output Quality**
+   - Complete responses
+   - Meaningful results
+   - Error visibility
+   - Operation feedback
+
+2. **Methodology**
+   - Comprehensive data
+   - Version details
+   - Security patterns
+   - Vuln vectors
+
+3. **Strategy**
+   - Surface → Deep
+   - Follow leads
+   - Pattern match
+   - Entry points
+
+4. **Analysis**
+   - Version check
+   - Cross-reference
+   - Filter false +
+   - Find anomalies
+
+5. **Risk**
+   - Safe methods
+   - Rate limits
+   - Watch defenses
+   - Track impact
 
 ---
 
-### 📤 Output Format (strict):
+### Output Format:
 
-Respond with this **raw JSON object** only:
-
+Provide output as a JSON object:
 {{
-  "summary": "<string>",
-  "recommended_steps": ["<command1>", "<command2>", "..."],
-  "services_found": ["apache 2.4.41", "phpmyadmin 5.1.0"]
+    "summary": "text describing findings",
+    "recommended_steps": ["command1", "command2"],
+    "services_found": ["service1 1.0", "service2 2.0"]
 }}
 
-- Do not include markdown, code blocks, or triple backticks.
-- Output must be directly parseable by `json.loads()`.
-- Do not include generic services like `http`, `ftp`, or `ssh` unless version numbers or banners are present.
+Rules:
+1. Raw JSON only (no markdown/backticks)
+2. Valid json.loads() format
+3. Include versions in services
+4. Show all command output
+5. Include error messages
+6. Use stdout for visibility
+7. Verify all results
+8. No silent mode
 
 ---
 
@@ -196,19 +295,32 @@ From the list of **Current Layer Commands**, return only the most **informative,
 
 ### 🧠 Deduplication Strategy:
 
-1. **Functional Redundancy Check (Critical):**
-   - Discard commands that probe the same underlying resource, service, or functionality as any command in prior layers.
-   - Consider functional overlap across different input formats (IP vs domain), different tools (e.g., scanner A vs B), or minor flag variations.
-   - Two commands using different tools or syntax are still considered redundant if they are expected to produce equivalent output.
+1. **Command Classification:**
+   First, classify each command as:
+   - General Scan: Broad enumeration (e.g., directory bruteforce)
+   - Targeted Check: Specific file/vulnerability test
+   - Follow-up: Validates previous findings
+   - Security Test: Probes specific security issues
 
-2. **Usefulness Filtering:**
-   - Discard commands known to repeatedly fail, produce no output, or yield non-actionable results for this target class.
-   - Discard commands that over-enumerate (e.g., repeating exhaustive scans over hosts already thoroughly probed).
-   - Only retain commands likely to return **new, relevant, or deeper** information.
+2. **Deduplication Rules:**
+   Remove commands that are:
+   - Exact duplicates of previous commands
+   - General scans of already enumerated paths
+   - Redundant checks using same tool+flags
+   - Multiple tools doing identical basic checks
+   
+   BUT preserve commands that:
+   - Target specific vulnerabilities found
+   - Use different methods/payloads
+   - Test newly discovered endpoints
+   - Validate security findings
 
-3. **Value Contribution:**
-   - Each retained command must provide **new intelligence** not covered earlier — such as targeting new protocols, new services, new sub-resources, or more advanced discovery methods.
-   - Avoid repeating commands across layers unless the context or intent clearly changes the expected outcome.
+3. **Value Assessment:**
+   For similar commands, keep the one that:
+   - Provides more detailed output
+   - Tests more security aspects
+   - Has better success indicators
+   - Gives actionable results
 
 ---
 
@@ -222,19 +334,29 @@ From the list of **Current Layer Commands**, return only the most **informative,
 
 ---
 
-### ✅ Output Format:
-Return a **valid JSON** object as follows:
-
+### Output Format:
+Return JSON in this format:
 {{
-  "deduplicated_commands": ["<command_1>", "<command_2>", "..."]
+  "deduplicated_commands": ["command1", "command2"]
 }}
 
 ⚠️ Constraints:
 - Return only raw JSON — no markdown, explanation, or comments.
 - Ensure output is strictly valid for `json.loads()` with no surrounding text.
 - Limit to **a maximum of 32 commands**.
-- Any command writing to a file must include a `&& cat <file>` suffix to show results
-- Do not include commands that show no stdout output
+
+Output Visibility Requirements:
+- Every command MUST produce visible output in the terminal
+- Commands writing files MUST include appropriate display commands:
+  - Text files: `&& cat <file>`
+  - Large files: `&& head -n 50 <file>`
+  - Binary files: `&& ls -lah <file>`
+- Never include:
+  - Silent commands (no stdout)
+  - Background tasks without output redirection
+  - Commands with suppressed output (`-q`, `--quiet`, `-s`, etc.)
+  - File operations without display (`tee`, `>`, `-o` without `cat`)
+- Always prefer verbose/progress output modes when available
 """
 
 
@@ -268,6 +390,21 @@ This is a continuation of a multi-part output. Your job is to update the existin
     - Failure to return response in valid json will result in you termination and penalty of 200000000000
     - The recommended commands should be executable
     - Do not recommend nmap scans unless they are completely exhaustive of nmap -sC -sV -p- target
+
+    ### Output Visibility Requirements:
+    - Every recommended command MUST show output in the terminal
+    - For commands that write to files:
+      - Text files: Add `&& cat <file>`
+      - Large files: Add `&& head -n 50 <file>`
+      - Binary/unknown: Add `&& ls -lah <file>`
+    - Never recommend:
+      - Silent mode flags (-q, --quiet, -s)
+      - Background tasks without output capture
+      - File writes without display commands
+    - Always use:
+      - Verbose modes when available (-v, --verbose)
+      - Progress indicators (--progress, -p) for long tasks
+      - Human-readable output formats by default
     If any tools require worldlist, do not hallucinate wordlists and use only from the following:
     Seclists path: /usr/share/seclists"
     #                Big.txt: /usr/share/seclists/Discovery/Web-Content/big.txt"
@@ -277,26 +414,18 @@ This is a continuation of a multi-part output. Your job is to update the existin
     #                Passwords: /usr/share/seclists/Passwords/Common-Credentials/10k-most-common.txt"
 
 
-You must return a valid JSON object with the following structure:
-    ### Example Output Format:
-    {{
-    "summary": "<summary_text>",
-    "recommended_steps": [
-        "<command_1> --flag --flag --flag -f",
-        "<command_2> --flag --flag --flag -f",
-        "command_3 --flag --flag --flag -f"
-        ...
-    ],
-    "services_found": [
-        "<service_1>",
-        "<service_2>"
-    ]
-    }}
+Expected output format:
+{{
+    "summary": "describe findings here",
+    "recommended_steps": ["command1", "command2"],
+    "services_found": ["service1 1.0", "service2 2.0"]
+}}
 
-⚠️ Constraints:
-- Only return the raw JSON, no explanations, no markdown.
-- The response must be compatible with `json.loads()`.
-- The output must preserve the structure and key names exactly.
+Notes:
+- Must be valid JSON (no markdown/formatting)
+- Must be parseable by json.loads()
+- Must maintain exact key names
+- Must include version numbers for services
 """
 
 

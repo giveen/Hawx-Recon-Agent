@@ -150,7 +150,7 @@ def execute_command(command_parts, llm_client, base_dir, layer):
             last_update = time.time()
             # Get inactivity timeout from environment (seconds)
             try:
-                timeout = int(os.environ.get("TIMEOUT", "180"))
+                timeout = int(os.environ.get("TIMEOUT", "600"))
             except ValueError:
                 timeout = 180
 
@@ -296,6 +296,7 @@ def execute_command(command_parts, llm_client, base_dir, layer):
     json_data_file = os.path.join(base_dir, "summary_data.json")
     tool_data = {
         "tool": tool,
+        "command": " ".join(command_parts),
         "summary": summary_text,
         "recommended_steps": recommended,
         "services_found": services_found,

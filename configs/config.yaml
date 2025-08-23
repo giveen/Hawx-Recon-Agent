@@ -1,6 +1,6 @@
 llm:
-  provider: openrouter         # Options: ollama, openai, openrouter, groq, etc.
-  model: google/gemini-2.5-flash  # Model name for the selected provider
+  provider: anthropic         # Options: ollama, openai, openrouter, groq, etc.
+  model: claude-opus-4-1-20250805 # Model name for the selected provider
   context_length: 60000    # Some models support higher limitsm
 # ollama:
 #   host: http://host.docker.internal:11434
