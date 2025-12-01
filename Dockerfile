@@ -10,7 +10,7 @@ WORKDIR /opt/agent
 
 # Copy and install core requirements
 COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --break-system-packages --no-cache-dir -r /tmp/requirements.txt
+RUN pip3 install --ignore-installed --break-system-packages --no-cache-dir -r /tmp/requirements.txt
 
 # Copy and install runtime requirements
 COPY requirements_runtime.txt /tmp/requirements_runtime.txt
