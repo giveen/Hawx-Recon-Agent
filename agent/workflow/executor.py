@@ -70,10 +70,25 @@ class ReconExecutor:
 
     def _load_layer0_config(self) -> Dict:
         """Load and validate the layer0.yaml configuration."""
-        config_path = os.path.join(
-            os.path.dirname(__file__), "../configs", "layer0.yaml"
-        )
+        # Search for layer0.yaml in several locations (env override, /opt, repo configs/)
+        candidates = [
+            os.getenv("LAYER0_PATH"),
+            os.path.join(os.getcwd(), "configs", "layer0.yaml"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "layer0.yaml"),
+            os.path.join("/opt/agent/configs", "layer0.yaml"),
+        ]
+        config_path = None
+        for c in candidates:
+            if not c:
+                continue
+            c_abs = os.path.abspath(c)
+            if os.path.exists(c_abs):
+                config_path = c_abs
+                break
+
         try:
+            if config_path is None:
+                raise FileNotFoundError("layer0.yaml not found in known locations")
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
 

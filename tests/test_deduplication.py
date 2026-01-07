@@ -1,7 +1,7 @@
 import os
 import pytest
 from agent.utils.config import load_config
-from agent.llm.llm_client import LLMClient
+from agent.llm.fake_llm import FakeLLM
 
 
 @pytest.mark.parametrize(
@@ -66,16 +66,8 @@ from agent.llm.llm_client import LLMClient
     ],
 )
 def test_deduplication_variants(commands, expected_retained):
-    config = load_config()
-    client = LLMClient(
-        provider=config["provider"],
-        model=config["model"],
-        api_key=os.environ["LLM_API_KEY"],
-        base_url=config.get("base_url"),
-        ollama_host=config.get("host"),
-        context_length=config.get("context_length", 8192),
-    )
-
+    # Use a FakeLLM for deterministic, offline unit tests
+    client = FakeLLM()
     result = client.deduplicate_commands(commands, layer=1)
     actual = result["deduplicated_commands"]
 

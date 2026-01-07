@@ -58,7 +58,8 @@ class LLMClient:
     # ========== Utility Methods ==========
     def _chunk_text_by_tokens(self, text, max_tokens):
         """Split text into chunks based on token count for LLM context limits."""
-        tokens = re.findall(r"\w+|\S", text)
+        # Use a tokenization that preserves whitespace so chunks don't join words together
+        tokens = re.findall(r"\S+\s*", text)
         chunks = []
         for i in range(0, len(tokens), max_tokens):
             chunk = "".join(tokens[i : i + max_tokens])
