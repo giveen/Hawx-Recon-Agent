@@ -112,6 +112,8 @@ class LLMClient:
             return self._query_openai(prompt)
         elif self.provider == "ollama":
             return self._query_ollama(prompt)
+        elif self.provider == "claude":
+            return self._query_claude(prompt)
         elif self.provider == "anthropic":
             return self._query_anthropic(prompt)
         else:
@@ -250,6 +252,106 @@ class LLMClient:
             return f"{b}/{path}"
 
         return f"{b}/v1/{path}"
+
+    def _query_claude(self, prompt):
+        """Send a prompt to a Claude-compatible API (tolerant to common response shapes)."""
+        if not self.base_url:
+            raise RuntimeError("No base_url configured for Claude provider")
+
+        headers = self._build_headers().copy()
+        # Claude often accepts x-api-key instead of Authorization Bearer
+        if self.api_key and "x-api-key" not in headers:
+            headers.setdefault("x-api-key", self.api_key)
+
+        # Try a few common Claude endpoints/payloads
+        endpoints = [
+            ("responses", {"model": self.model, "input": prompt}),
+            ("messages", {"messages": [{"role": "user", "content": prompt}]}),
+            ("chat/completions", self._build_chat_payload(prompt)),
+            ("completions", {"model": self.model, "prompt": prompt}),
+        ]
+
+        last_exc = None
+        for path, payload in endpoints:
+            try:
+                url = self._make_url(path)
+                resp = requests.post(url, headers=headers, json=payload, timeout=12)
+            except Exception as e:
+                last_exc = e
+                resp = None
+            if resp is None:
+                continue
+
+            # If server returns structured error in 200, skip
+            try:
+                j = resp.json()
+                if isinstance(j, dict) and j.get("error"):
+                    last_exc = RuntimeError(j.get("error"))
+                    continue
+            except Exception:
+                if resp.text and "Unexpected endpoint" in resp.text:
+                    last_exc = RuntimeError(resp.text)
+                    continue
+
+            try:
+                resp.raise_for_status()
+            except Exception as e:
+                last_exc = e
+                continue
+
+            # Parse common Claude-style output shapes
+            try:
+                data = resp.json()
+            except Exception:
+                return resp.text
+
+            # responses -> output -> [{content:[{type:'output_text', text:'...'}]}]
+            if isinstance(data, dict):
+                if "output" in data and isinstance(data["output"], list) and data["output"]:
+                    out = data["output"][0]
+                    if isinstance(out, dict) and "content" in out and isinstance(out["content"], list):
+                        c = out["content"][0]
+                        if isinstance(c, dict) and "text" in c:
+                            return c["text"].strip()
+                        if isinstance(c, dict) and "type" in c and c.get("type") == "output_text" and "text" in c:
+                            return c["text"].strip()
+
+                # messages endpoint: {output: [{content:[{type:'output_text', text:'...'}]}]} or {completion: '...'}
+                if "messages" in data and isinstance(data["messages"], list) and data["messages"]:
+                    # try to extract assistant reply
+                    for msg in data["messages"]:
+                        if isinstance(msg, dict):
+                            # content may be string or list
+                            if "content" in msg:
+                                cont = msg["content"]
+                                if isinstance(cont, str):
+                                    return cont.strip()
+                                if isinstance(cont, list) and cont:
+                                    item = cont[0]
+                                    if isinstance(item, dict) and "text" in item:
+                                        return item["text"].strip()
+
+                # Some responses use 'completion' or 'response' keys
+                for key in ("completion", "response", "result", "choices"):
+                    if key in data:
+                        val = data[key]
+                        if isinstance(val, str):
+                            return val.strip()
+                        if isinstance(val, list) and val:
+                            item = val[0]
+                            if isinstance(item, dict):
+                                for possible in ("text", "content", "message", "response"):
+                                    if possible in item and isinstance(item[possible], str):
+                                        return item[possible].strip()
+                            elif isinstance(item, str):
+                                return item.strip()
+
+            # Fallback to raw text
+            return resp.text
+
+        if last_exc:
+            raise RuntimeError(f"Claude request failed: {last_exc}")
+        raise RuntimeError("Claude request failed: no usable endpoint response")
 
     def _query_ollama(self, prompt):
         """Send a prompt to the Ollama API."""
