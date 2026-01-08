@@ -8,6 +8,7 @@ command deduplication, and executive summary generation.
 import json
 import os
 import re
+import time
 import requests
 from agent.utils.records import Records
 from agent.llm import prompt_builder
@@ -58,6 +59,10 @@ class LLMClient:
         # Load available tools for prompt context
         records = Records()
         self.available_tools = records.available_tools
+
+        # HTTP session for connection reuse and instrumentation
+        self._session = requests.Session()
+        self._metrics_path = os.path.join(os.getcwd(), "llm_metrics.ndjson")
 
         # No automatic endpoint probing here; _query_openai will try common endpoints gracefully.
 
@@ -122,6 +127,15 @@ class LLMClient:
     def _query_openai(self, prompt):
         """Send a prompt to the OpenAI-compatible API."""
         try:
+            # Truncate prompt to avoid enormous prompt tokens; reserve some context for system
+            max_prompt = max(256, min(self.context_length - 1000, 4096))
+            prompt = self._truncate_prompt(prompt, max_prompt)
+
+            # If we've previously detected which endpoint works for this base_url, try only that
+            cached = self._get_cached_endpoint()
+            if cached:
+                endpoints = [(cached, {"model": self.model, "input": prompt})] if cached == "responses" else [(cached, self._build_chat_payload(prompt))] if cached == "chat/completions" else [(cached, {"model": self.model, "prompt": prompt})]
+
             def parse_response(resp):
                 try:
                     data = resp.json()
@@ -167,7 +181,7 @@ class LLMClient:
                 try:
                     # Ensure we call the /v1 prefixed endpoints (some servers expect /v1/*)
                     url = self._make_url(path)
-                    resp = requests.post(url, headers=self._build_headers(), json=payload, timeout=12)
+                    resp = self._post(url, self._build_headers(), payload, timeout=12)
                 except Exception as e:
                     last_exc = e
                     resp = None
@@ -198,6 +212,11 @@ class LLMClient:
                     raise RuntimeError("Rate limit exceeded")
 
                 parsed = parse_response(resp)
+                # Cache successful endpoint for future calls
+                try:
+                    self._set_cached_endpoint(path)
+                except Exception:
+                    pass
                 # If parsed text still contains server-side unexpected endpoint message, skip
                 if isinstance(parsed, str) and "Unexpected endpoint" in parsed:
                     last_exc = RuntimeError(parsed)
@@ -224,13 +243,62 @@ class LLMClient:
         for path, payload in probes:
             try:
                 url = self._make_url(path)
-                r = requests.post(url, headers=self._build_headers(), json=payload, timeout=4)
+                r = self._post(url, self._build_headers(), payload, timeout=4)
                 # Accept 200 and also some 4xx/5xx that indicate endpoint exists but failed
                 if r.status_code == 200 or (r.status_code >= 400 and r.status_code < 500):
                     return 'responses' if path == 'responses' else ('completions' if path == 'completions' else 'chat/completions')
             except Exception:
                 continue
         return None
+
+    # ---- Endpoint cache helpers ----
+    def _cache_path(self):
+        try:
+            return os.path.expanduser("~/.hawx_llm_cache.json")
+        except Exception:
+            return os.path.join(os.getcwd(), "hawx_llm_cache.json")
+
+    def _get_cached_endpoint(self):
+        """Return cached endpoint string for this base_url, or None."""
+        if not self.base_url:
+            return None
+        p = self._cache_path()
+        try:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data.get(self.base_url)
+        except Exception:
+            return None
+        return None
+
+    def _set_cached_endpoint(self, endpoint_name):
+        """Persist endpoint_name for this base_url."""
+        if not self.base_url:
+            return
+        p = self._cache_path()
+        try:
+            data = {}
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            data[self.base_url] = endpoint_name
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
+
+    # ---- Prompt length helpers ----
+    def _truncate_prompt(self, prompt, max_tokens):
+        """Naive truncation preserving word boundaries to approx max_tokens (uses whitespace tokens)."""
+        if not prompt:
+            return prompt
+        tokens = re.findall(r"\S+\s*", prompt)
+        if len(tokens) <= max_tokens:
+            return prompt
+        # Keep the trailing context (last tokens) which is often the most relevant
+        truncated = "".join(tokens[-max_tokens:])
+        return truncated
 
     def _make_url(self, path: str) -> str:
         """Construct a full URL for the given OpenAI-style path, ensuring `/v1/` is present once.
@@ -252,6 +320,56 @@ class LLMClient:
             return f"{b}/{path}"
 
         return f"{b}/v1/{path}"
+
+    def _post(self, url, headers, payload, timeout=12):
+        """Helper to POST using the session and record timing and sizes to metrics file."""
+        start = time.time()
+        try:
+            resp = self._session.post(url, headers=headers, json=payload, timeout=timeout)
+            elapsed = time.time() - start
+            # Attempt to extract usage if provided by the model server
+            usage = None
+            resp_text = None
+            try:
+                j = resp.json()
+                usage = j.get("usage") if isinstance(j, dict) else None
+                resp_text = json.dumps(j)
+            except Exception:
+                resp_text = resp.text
+
+            record = {
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
+                "provider": self.provider,
+                "url": url,
+                "status_code": getattr(resp, "status_code", None),
+                "elapsed_s": round(elapsed, 3),
+                "request_bytes": len(json.dumps(payload)) if payload is not None else 0,
+                "response_bytes": len(resp.content) if hasattr(resp, "content") else (len(resp_text) if resp_text else 0),
+                "usage": usage,
+            }
+            try:
+                with open(self._metrics_path, "a", encoding="utf-8") as mf:
+                    mf.write(json.dumps(record) + "\n")
+            except Exception:
+                pass
+
+            return resp
+        except Exception as e:
+            elapsed = time.time() - start
+            record = {
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
+                "provider": self.provider,
+                "url": url,
+                "error": str(e),
+                "elapsed_s": round(elapsed, 3),
+                "request_bytes": len(json.dumps(payload)) if payload is not None else 0,
+            }
+            try:
+                with open(self._metrics_path, "a", encoding="utf-8") as mf:
+                    mf.write(json.dumps(record) + "\n")
+            except Exception:
+                pass
+            raise
 
     def _query_claude(self, prompt):
         """Send a prompt to a Claude-compatible API (tolerant to common response shapes)."""
@@ -275,7 +393,7 @@ class LLMClient:
         for path, payload in endpoints:
             try:
                 url = self._make_url(path)
-                resp = requests.post(url, headers=headers, json=payload, timeout=12)
+                resp = self._post(url, headers, payload, timeout=12)
             except Exception as e:
                 last_exc = e
                 resp = None
@@ -356,10 +474,8 @@ class LLMClient:
     def _query_ollama(self, prompt):
         """Send a prompt to the Ollama API."""
         try:
-            resp = requests.post(
-                f"{self.host.rstrip('/')}/api/generate",
-                json={"model": self.model, "prompt": prompt, "stream": False},
-            )
+            url = f"{self.host.rstrip('/')}/api/generate"
+            resp = self._post(url, self._build_headers(), {"model": self.model, "prompt": prompt, "stream": False}, timeout=12)
             resp.raise_for_status()
             data = resp.json()
             # Ollama may return {response: '...'} or {choices:[{content:'...'}]} or nested outputs
@@ -398,7 +514,7 @@ class LLMClient:
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 4096,
             }
-            resp = requests.post(url, headers=headers, json=data, timeout=10)
+            resp = self._post(url, headers, data, timeout=10)
             resp.raise_for_status()
             if resp.status_code == 429:
                 raise RuntimeError("Rate limit exceeded")
