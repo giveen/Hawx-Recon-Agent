@@ -259,7 +259,26 @@ class LLMClient:
                 json={"model": self.model, "prompt": prompt, "stream": False},
             )
             resp.raise_for_status()
-            return resp.json().get("response", "").strip()
+            data = resp.json()
+            # Ollama may return {response: '...'} or {choices:[{content:'...'}]} or nested outputs
+            if isinstance(data, dict):
+                if "response" in data and isinstance(data["response"], str):
+                    return data["response"].strip()
+                if "choices" in data and isinstance(data["choices"], list) and data["choices"]:
+                    first = data["choices"][0]
+                    if isinstance(first, dict):
+                        for key in ("content", "text", "message", "response"):
+                            if key in first and isinstance(first[key], str):
+                                return first[key].strip()
+                if "output" in data:
+                    out = data["output"]
+                    if isinstance(out, str):
+                        return out.strip()
+                    if isinstance(out, list) and out:
+                        itm = out[0]
+                        if isinstance(itm, str):
+                            return itm.strip()
+            return resp.text.strip()
         except Exception as exc:
             raise RuntimeError(f"Ollama request failed: {exc}")
 
@@ -277,11 +296,32 @@ class LLMClient:
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 4096,
             }
-            resp = requests.post(url, headers=headers, json=data)
+            resp = requests.post(url, headers=headers, json=data, timeout=10)
             resp.raise_for_status()
             if resp.status_code == 429:
                 raise RuntimeError("Rate limit exceeded")
-            return resp.json()["content"][0]["text"]
+            j = resp.json()
+            # Try multiple common response shapes
+            if isinstance(j, dict):
+                if "completion" in j and isinstance(j["completion"], str):
+                    return j["completion"].strip()
+                if "content" in j and isinstance(j["content"], list) and j["content"]:
+                    first = j["content"][0]
+                    if isinstance(first, dict) and "text" in first:
+                        return first["text"].strip()
+                if "message" in j and isinstance(j["message"], dict) and "content" in j["message"]:
+                    return j["message"]["content"].strip()
+                if "result" in j and isinstance(j["result"], dict):
+                    res = j["result"]
+                    if "content" in res and isinstance(res["content"], list) and res["content"]:
+                        c = res["content"][0]
+                        if isinstance(c, dict) and "text" in c:
+                            return c["text"].strip()
+            # Fallback to previously expected shape
+            try:
+                return resp.json()["content"][0]["text"]
+            except Exception:
+                return resp.text
         except Exception as exc:
             raise RuntimeError(f"Anthropic request failed: {exc}")
 
