@@ -1,9 +1,8 @@
 llm:
-  provider: anthropic         # Options: ollama, openai, openrouter, groq, etc.
-  model: claude-opus-4-1-20250805 # Model name for the selected provider
-  context_length: 60000    # Some models support higher limitsm
-# ollama:
-#   host: http://host.docker.internal:11434
+  provider: openai
+  model: qwen3-coder-30b-a3b-it-heretic-i1
+  base_url: http://192.168.0.100:1234
+  context_length: 60000
 
 # Notes:
 # - To switch models or providers, edit the values above

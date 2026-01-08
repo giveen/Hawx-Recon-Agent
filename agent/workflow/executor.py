@@ -48,11 +48,34 @@ class ReconExecutor:
                 )
                 sys.exit(1)
         # Directory for storing recon data for this target
+        # Determine triage root in order of preference:
+        # 1. `TRIAGE_PATH` env var if provided
+        # 2. `/mnt/triage` if it exists and is writable (typical container volume)
+        # 3. repo-local `triage/` directory
+        triage_env = os.getenv("TRIAGE_PATH")
+        if triage_env:
+            triage_root = triage_env
+        else:
+            mnt_triage = "/mnt/triage"
+            if os.path.exists(mnt_triage) and os.access(mnt_triage, os.W_OK):
+                triage_root = mnt_triage
+            else:
+                triage_root = os.path.join(os.getcwd(), "triage")
+
         self.base_dir = os.path.join(
-            "/mnt/triage",
+            triage_root,
             target if target_mode == "host" else self._get_domain(target),
         )
-        os.makedirs(self.base_dir, exist_ok=True)
+        try:
+            os.makedirs(self.base_dir, exist_ok=True)
+        except PermissionError:
+            # Fall back to repo-local triage if we can't write to the chosen root
+            triage_root = os.path.join(os.getcwd(), "triage")
+            self.base_dir = os.path.join(
+                triage_root,
+                target if target_mode == "host" else self._get_domain(target),
+            )
+            os.makedirs(self.base_dir, exist_ok=True)
         # Records object to track commands and services
         self.records = Records()
         # Load layer0 configuration

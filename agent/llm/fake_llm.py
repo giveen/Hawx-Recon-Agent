@@ -45,3 +45,35 @@ class FakeLLM:
             result.append(cmd)
 
         return {"deduplicated_commands": result}
+
+    def post_step(self, command, command_output_file, previous_commands=None, command_output_override=None, similar_context=None):
+        """Return a minimal summary structure expected by `execute_command`.
+
+        This keeps behavior deterministic and avoids external calls during tests.
+        """
+        summary = ""
+        services = []
+        recommended = []
+        # Very small heuristic: if output contains 'open' and a port number, record an http service
+        content = ""
+        if command_output_override is not None:
+            content = command_output_override
+        else:
+            try:
+                with open(command_output_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                content = ""
+
+        if "open" in content.lower():
+            # naive port/service extraction
+            import re
+
+            ports = re.findall(r"(\d{1,5})/tcp\s+open\s+([a-zA-Z0-9_\-]+)", content)
+            for p, svc in ports:
+                services.append(f"{svc} {p}")
+
+        return {"summary": summary, "recommended_steps": recommended, "services_found": services}
+
+    def executive_summary(self, base_dir):
+        return "Fake executive summary"
