@@ -36,10 +36,26 @@ class FakeLLM:
                     if p.startswith("http://") or p.startswith("https://"):
                         host = p
                         break
+                # normalize host to scheme://netloc for comparison
+                norm_host = None
+                if host:
+                    try:
+                        from urllib.parse import urlparse
+
+                        up = urlparse(host)
+                        if up.scheme and up.netloc:
+                            norm_host = f"{up.scheme}://{up.netloc}"
+                        else:
+                            norm_host = host
+                    except Exception:
+                        norm_host = host
+
                 found_dirb = False
                 for c in current_layer:
-                    if "dirb" in c and host and host in c:
-                        found_dirb = True
+                    if "dirb" in c and norm_host:
+                        # check for base host or netloc in the dirb command
+                        if norm_host in c or ("//" in norm_host and norm_host.split("//",1)[1] in c):
+                            found_dirb = True
                 if found_dirb:
                     continue
             result.append(cmd)
