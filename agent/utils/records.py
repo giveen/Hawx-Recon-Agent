@@ -22,10 +22,27 @@ class Records:
         self.commands = [[] for _ in range(6)]
         # List of discovered services (e.g., 'apache 2.4.41')
         self.services = []
-        # Path to the YAML file containing tool definitions
-        self.tools_yaml_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "configs", "tools.yaml"
-        )
+        # Path to the YAML file containing tool definitions.
+        # Search common locations (env override, repo-level configs/, /opt)
+        candidates = [
+            os.getenv("TOOLS_YAML_PATH"),
+            os.path.join(os.getcwd(), "configs", "tools.yaml"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "tools.yaml"),
+            "/opt/agent/configs/tools.yaml",
+        ]
+        found = None
+        for c in candidates:
+            if not c:
+                continue
+            c_abs = os.path.abspath(c)
+            if os.path.exists(c_abs):
+                found = c_abs
+                break
+        if found:
+            self.tools_yaml_path = found
+        else:
+            # Fallback: point to repo configs/tools.yaml (may raise later if missing)
+            self.tools_yaml_path = os.path.join(os.getcwd(), "configs", "tools.yaml")
         # List of all available tools (apt, pip, custom)
         self.available_tools = self.get_tools()
 

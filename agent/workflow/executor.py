@@ -48,11 +48,34 @@ class ReconExecutor:
                 )
                 sys.exit(1)
         # Directory for storing recon data for this target
+        # Determine triage root in order of preference:
+        # 1. `TRIAGE_PATH` env var if provided
+        # 2. `/mnt/triage` if it exists and is writable (typical container volume)
+        # 3. repo-local `triage/` directory
+        triage_env = os.getenv("TRIAGE_PATH")
+        if triage_env:
+            triage_root = triage_env
+        else:
+            mnt_triage = "/mnt/triage"
+            if os.path.exists(mnt_triage) and os.access(mnt_triage, os.W_OK):
+                triage_root = mnt_triage
+            else:
+                triage_root = os.path.join(os.getcwd(), "triage")
+
         self.base_dir = os.path.join(
-            "/mnt/triage",
+            triage_root,
             target if target_mode == "host" else self._get_domain(target),
         )
-        os.makedirs(self.base_dir, exist_ok=True)
+        try:
+            os.makedirs(self.base_dir, exist_ok=True)
+        except PermissionError:
+            # Fall back to repo-local triage if we can't write to the chosen root
+            triage_root = os.path.join(os.getcwd(), "triage")
+            self.base_dir = os.path.join(
+                triage_root,
+                target if target_mode == "host" else self._get_domain(target),
+            )
+            os.makedirs(self.base_dir, exist_ok=True)
         # Records object to track commands and services
         self.records = Records()
         # Load layer0 configuration
@@ -70,10 +93,25 @@ class ReconExecutor:
 
     def _load_layer0_config(self) -> Dict:
         """Load and validate the layer0.yaml configuration."""
-        config_path = os.path.join(
-            os.path.dirname(__file__), "../configs", "layer0.yaml"
-        )
+        # Search for layer0.yaml in several locations (env override, /opt, repo configs/)
+        candidates = [
+            os.getenv("LAYER0_PATH"),
+            os.path.join(os.getcwd(), "configs", "layer0.yaml"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "layer0.yaml"),
+            os.path.join("/opt/agent/configs", "layer0.yaml"),
+        ]
+        config_path = None
+        for c in candidates:
+            if not c:
+                continue
+            c_abs = os.path.abspath(c)
+            if os.path.exists(c_abs):
+                config_path = c_abs
+                break
+
         try:
+            if config_path is None:
+                raise FileNotFoundError("layer0.yaml not found in known locations")
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
 

@@ -53,6 +53,7 @@ def main():
         api_key=config["api_key"],
         provider=config["provider"],
         model=config["model"],
+        base_url=config.get("base_url"),
         ollama_host=config.get("host"),
         context_length=config.get("context_length", 8192),
     )

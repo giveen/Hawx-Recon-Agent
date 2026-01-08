@@ -20,12 +20,30 @@ def load_config(config_path=None):
         raise ValueError("LLM_API_KEY must be set in the .env file.")
 
     # Load structured config from YAML file
-    # Try default locations
+    # Search locations in order: explicit path, CONFIG_PATH env, /opt, repo-local configs/
     if config_path is None:
-        if os.path.exists("/opt/agent/configs/config.yaml"):
-            config_path = "/opt/agent/configs/config.yaml"
+        config_path = os.getenv("CONFIG_PATH")
+    if config_path and os.path.exists(config_path):
+        pass
+    else:
+        candidates = [
+            os.getenv("CONFIG_PATH"),
+            "/opt/agent/configs/config.yaml",
+            os.path.join(os.getcwd(), "configs", "config.yaml"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "config.yaml"),
+        ]
+        found = None
+        for c in candidates:
+            if not c:
+                continue
+            c_abs = os.path.abspath(c)
+            if os.path.exists(c_abs):
+                found = c_abs
+                break
+        if found:
+            config_path = found
         else:
-            raise FileNotFoundError("config.yaml not found in known locations")
+            raise FileNotFoundError("config.yaml not found in known locations; set CONFIG_PATH to override")
 
     with open(config_path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
